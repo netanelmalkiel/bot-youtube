@@ -1,0 +1,5 @@
+python-telegram-bot>=13.11
+yt-dlp>=2022.6.29
+loguru~=0.6.0
+boto3~=1.24.66
+botocore~=1.27.66

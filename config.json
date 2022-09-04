@@ -1,0 +1,5 @@
+{
+  "aws_region": "us-east-1",
+  "bot_to_worker_queue_name": "tg-youtube-bot",
+  "autoscaling_group_name": "tg-youtube-bot"
+}
