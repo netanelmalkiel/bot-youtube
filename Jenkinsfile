@@ -20,13 +20,13 @@ pipeline {
                 }
             }
          }
-	stage(destroy) {
-            steps {
-                withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'natimalkiel-aws-creds', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
-                echo "destroying...."
-                sh 'terraform destroy -auto-approve'
-                }
-            }
-        }
+// 	stage(destroy) {
+//             steps {
+//                 withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'natimalkiel-aws-creds', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+//                 echo "destroying...."
+//                 sh 'terraform destroy -auto-approve'
+//                 }
+//             }
+//         }
     }
 }
