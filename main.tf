@@ -9,45 +9,37 @@ provider "aws" {
 }
 
 ######################################################################
+module "app_vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "3.14.0"
 
-data "aws_availability_zones" "available" {
+  name = "tg-youtube-bot"
+  cidr = "10.0.0.0/16"
+
+  azs             = data.aws_availability_zones.available_azs.names
+  private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
+  public_subnets  = ["10.0.3.0/24", "10.0.4.0/24"]
+
+  enable_nat_gateway = false
+
+  tags = {
+    Name        = "tg-youtube-bot"
+  }
+}
+
+data "aws_availability_zones" "available_azs" {
   state = "available"
 }
 
 ######################################################################
-
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "2.77.0"
-
-  name = "main-vpc"
-  cidr = "10.0.0.0/16"
-
-  azs                  = data.aws_availability_zones.available.names
-  public_subnets       = ["10.0.4.0/24", "10.0.5.0/24", "10.0.6.0/24"]
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-}
-
-######################################################################
-
-data "aws_ami" "amazon-linux" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["amzn-ami-hvm-*-x86_64-ebs"]
-  }
-}
-
-######################################################################
-
-resource "aws_launch_configuration" "tg-youtube-bot" {
-  name_prefix     = "tg-youtube-bot"
-  image_id        = data.aws_ami.amazon-linux.id
-  instance_type   = "t2.micro"
-  key_name        = "2022_key"
+resource "aws_instance" "tg-youtube-bot" {
+  ami                    = "ami-05fa00d4c63e32376"
+  instance_type          = "t2.micro"
+  vpc_security_group_ids = [aws_security_group.tg-youtube-bot.id]
+  key_name               = "2022_key"
+  subnet_id              = module.app_vpc.public_subnets[0]
+  iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
+  associate_public_ip_address = true
   user_data = <<-EOF
           #!/bin/bash
           sudo yum  install git -y
@@ -60,27 +52,9 @@ resource "aws_launch_configuration" "tg-youtube-bot" {
           sudo docker run -d --restart=always bot
 
   EOF
-  security_groups = [aws_security_group.tg-youtube-bot.id]
 
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-######################################################################
-
-resource "aws_autoscaling_group" "tg-youtube-bot" {
-  name                 = "tg-youtube-bot"
-  min_size             = 1
-  max_size             = 1
-  desired_capacity     = 1
-  launch_configuration = aws_launch_configuration.tg-youtube-bot.name
-  vpc_zone_identifier  = module.vpc.public_subnets
-
-  tag {
-    key                 = "Name"
-    value               = "tg-youtube-bot"
-    propagate_at_launch = true
+  tags = {
+    Name = "tg-youtube-bot"
   }
 }
 
@@ -88,12 +62,14 @@ resource "aws_autoscaling_group" "tg-youtube-bot" {
 
 resource "aws_security_group" "tg-youtube-bot" {
   name = "tg-youtube-bot"
+  vpc_id      = module.app_vpc.vpc_id
+
 
   ingress {
-    from_port       = 22
-    to_port         = 22
-    protocol        = "tcp"
-    cidr_blocks     = ["0.0.0.0/0"]
+    from_port    = 22
+    to_port      = 22
+    protocol     = "tcp"
+    cidr_blocks  = ["0.0.0.0/0"]
   }
 
 egress {
@@ -102,48 +78,108 @@ egress {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
 }
-
-  vpc_id = module.vpc.vpc_id
 }
 
 ######################################################################
 
-# resource "aws_sqs_queue" "queue" {
-#   name = "s3-event-notification-queue"
+resource "aws_iam_role" "ec2-role" {
+  name = "ec2-role"
 
-#   policy = <<POLICY
-# {
-#   "Version": "2012-10-17",
-#   "Statement": [
-#     {
-#       "Effect": "Allow",
-#       "Principal": "*",
-#       "Action": "sqs:SendMessage",
-#       "Resource": "arn:aws:sqs:*:*:s3-event-notification-queue",
-#       "Condition": {
-#         "ArnEquals": { "aws:SourceArn": "${aws_s3_bucket.bucket.arn}" }
-#       }
-#     }
-#   ]
-# }
-# POLICY
-# }
+  assume_role_policy = jsonencode({
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Service": "ec2.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+        }
+    ]
+  })
+}
 
-# resource "aws_s3_bucket" "bucket" {
-#   bucket = "tg-youtube-bot"
-# }
+######################################################################
 
-# resource "aws_s3_bucket_notification" "bucket_notification" {
-#   bucket = aws_s3_bucket.bucket.id
+resource "aws_iam_policy" "ec2-policy" {
+  name        = "ec2-policy"
+  path        = "/"
+  description = "ec2-policy"
 
-#   queue {
-#     id            = "video-upload-event"
-#     queue_arn     = aws_sqs_queue.queue.arn
-#     events        = ["s3:ObjectCreated:*"]
-#     filter_prefix = "videos/"
-#   }
-# }
+  # Terraform's "jsonencode" function converts a
+  # Terraform expression result to valid JSON syntax.
+  policy = jsonencode({
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:*",
+                "s3-object-lambda:*"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Action": [
+                "sqs:*"
+            ],
+            "Effect": "Allow",
+            "Resource": "*"
+        }
+    ]
+  })
+}
 
+######################################################################
 
+resource "aws_iam_policy_attachment" "ec2_policy_role" {
+  name       = "ec2_attachment"
+  roles      = [aws_iam_role.ec2-role.name]
+  policy_arn = aws_iam_policy.ec2-policy.arn
+}
 
+######################################################################
+
+resource "aws_iam_instance_profile" "ec2_profile" {
+  name = "ec2_profile"
+  role = aws_iam_role.ec2-role.name
+}
+
+######################################################################
+
+resource "aws_s3_bucket" "data_bucket" {
+  bucket = "tg-youtube-bot"
+
+  tags = {
+    Name        = "tg-youtube-bot"
+  }
+}
+######################################################################
+#cloudwatch
+######################################################################
+resource "aws_sqs_queue" "tg-youtube-bot" {
+  name = "tg-youtube-bot"
+  visibility_timeout_seconds = 1800
+  message_retention_seconds  = 345600
+
+  policy = <<POLICY
+{
+  "Version": "2008-10-17",
+  "Id": "__default_policy_ID",
+  "Statement": [
+    {
+      "Sid": "__owner_statement",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "807967462364"
+      },
+      "Action": [
+        "SQS:*"
+      ],
+      "Resource": "arn:aws:sqs:us-east-1:807967462364:tg-youtube-bot"
+    }
+  ]
+}
+POLICY
+}
 
