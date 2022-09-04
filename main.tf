@@ -55,9 +55,10 @@ resource "aws_launch_configuration" "tg-youtube-bot" {
           sudo yum install docker -y
           sudo systemctl enable docker.service
           sudo service docker start
-          git clone https://github.com/netanelmalkiel/bot.git
-          (cd bot/; sudo docker build -t bot .)
-          sudo docker run --env-file ./envfile -d --restart=always bot
+          git clone https://github.com/netanelmalkiel/bot-youtube.git
+          (cd bot-youtube/; sudo docker build -t bot .)
+          sudo docker run -d --restart=always bot
+
   EOF
   security_groups = [aws_security_group.tg-youtube-bot.id]
 
