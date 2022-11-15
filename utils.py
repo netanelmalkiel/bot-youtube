@@ -38,7 +38,9 @@ def calc_backlog_per_instance(sqs_queue_client, asg_client, asg_group_name):
                     'MetricName': 'backlog_per_instance',
                     'Value': backlog_per_instance
                 }
-            ]
+            ],
+            Unit="Count"
+
         )
         # TODO send the backlog_per_instance metric to cloudwatch
 
