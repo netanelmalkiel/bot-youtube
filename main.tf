@@ -115,7 +115,6 @@ resource "aws_iam_policy" "ec2-policy" {
             "Effect": "Allow",
             "Action": [
                 "s3:*",
-                "s3-object-lambda:*"
             ],
             "Resource": "*"
         },
@@ -125,7 +124,22 @@ resource "aws_iam_policy" "ec2-policy" {
             ],
             "Effect": "Allow",
             "Resource": "*"
-        }
+        },
+                {
+            "Action": [
+                "autoscaling:*"
+            ],
+            "Effect": "Allow",
+            "Resource": "*"
+        },
+                        {
+            "Action": [
+                "cloudwatch:*"
+            ],
+            "Effect": "Allow",
+            "Resource": "*"
+        },
+
     ]
   })
 }
@@ -141,7 +155,7 @@ resource "aws_iam_policy_attachment" "ec2_policy_role" {
 ######################################################################
 
 resource "aws_iam_instance_profile" "ec2_profile" {
-  name = "ec2_profile"
+  name = "ec2_role"
   role = aws_iam_role.ec2-role.name
 }
 
